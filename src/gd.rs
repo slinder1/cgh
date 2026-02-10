@@ -1,0 +1,177 @@
+// Copyright © 2026 Advanced Micro Devices, Inc. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+use crate::change::{self, AnyChange, Change, LocalChange};
+use crate::env::{self, Command};
+use crate::gh::{self, Pr, PrState};
+use crate::util::Extract;
+use anyhow::{Context, Result, bail};
+use rayon::prelude::*;
+use std::collections::HashSet;
+use std::fs::File;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+
+pub fn gd() -> Result<()> {
+    let cli = env::cli();
+    if cli.globals.serial {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build_global()
+            .context("could not install serial thread pool")
+            .extract();
+    }
+    match cli.command {
+        Command::Push(ref cfg) => push(cfg),
+        Command::InstallHook(ref cfg) => install_hook(cfg),
+    }
+}
+
+fn push(cfg: &env::Push) -> Result<()> {
+    let mut reviewers = vec![];
+    for group_key in cfg.reviewer_groups.iter() {
+        let group = env::reviewer_groups()
+            .context("used a review group, but none were found in the config file")?
+            .get(group_key)
+            .with_context(|| format!("reviewer group {group_key:?} not found in config file"))?;
+        reviewers.extend_from_slice(group);
+    }
+    let local_changes =
+        change::get_local_changes().context("could not enumerate current local branch")?;
+    let mut prs_by_change_id = gh::prs_by_change_id(|pr| !pr.in_state(PrState::Closed))
+        .context("could not enumerate remote prs")?;
+    let mut any_changes = vec![];
+    for local_change in local_changes {
+        any_changes.push(match prs_by_change_id.remove(&local_change.id) {
+            None => AnyChange::LocalChange(local_change),
+            Some(pr) => {
+                if pr.in_state(PrState::Merged) {
+                    bail!(
+                        "pr {} with Change-Id {} already merged",
+                        pr.number,
+                        local_change.id
+                    );
+                }
+                AnyChange::Change(Change { local_change, pr })
+            }
+        });
+    }
+    // FIXME: This is pretty coarse-grained, could find the minimal set.
+    if detect_cycles(&any_changes) {
+        for any_change in any_changes.iter() {
+            if let AnyChange::Change(change) = any_change {
+                change
+                    .pr
+                    .mark_ready(false)
+                    .with_context(|| format!("could not mark pr as draft: {:?}", change.pr))?;
+                change.pr.set_base(env::base_branch()).with_context(|| {
+                    format!(
+                        "could not retarget pr {} to base branch: {:?}",
+                        change.pr.number,
+                        env::base_branch(),
+                    )
+                })?;
+            }
+        }
+    }
+    LocalChange::push_all(any_changes.iter().map(|ac| ac.local_change()))
+        .context("could not push all local changes")?;
+    let changes = any_changes
+        .into_par_iter()
+        .map(|any_change| {
+            let change = match any_change {
+                AnyChange::LocalChange(local_change) => {
+                    let pr = Pr::create(&local_change)
+                        .with_context(|| format!("could not create new pr for {local_change:?}"))?;
+                    Change { local_change, pr }
+                }
+                AnyChange::Change(change) => change,
+            };
+            Ok(change)
+        })
+        .collect::<Result<Vec<_>>>()
+        .context("could not create new prs")?;
+    let mut padded: Vec<Option<&Change>> = changes.iter().map(Some).collect();
+    padded.push(None);
+    padded
+        .par_windows(2)
+        .map(|w| {
+            let change = w[0].expect("first in window of padded vec is None?");
+            let parent = w[1];
+            let base = parent
+                .map(|p| p.local_change.remote_branch())
+                .unwrap_or_else(|| env::base_branch().to_owned());
+            change.pr.set_base(base.as_ref()).with_context(|| {
+                format!(
+                    "could not retarget pr {} to branch: {:?}",
+                    change.pr.number, base,
+                )
+            })?;
+            change
+                .render_pr_ui(&changes)
+                .context("could not render pseudo-ui in pr title/body")
+        })
+        .collect::<Result<Vec<_>>>()
+        .context("could not set pr bases and bodies")?;
+    changes
+        .par_iter()
+        .map(|c| c.pr.add_reviewers(reviewers.as_ref()))
+        .collect::<Result<Vec<_>>>()
+        .context("could not add pr reviewers")?;
+    changes
+        .par_iter()
+        .map(|c| c.pr.mark_ready(true))
+        .collect::<Result<Vec<_>>>()
+        .context("could not mark prs as ready")?;
+    Ok(())
+}
+
+fn detect_cycles(any_changes: &[AnyChange]) -> bool {
+    let mut parent_refs_seen: HashSet<String> = HashSet::new();
+    for any_change in any_changes.iter() {
+        if let AnyChange::Change(change) = any_change {
+            if !parent_refs_seen.is_empty()
+                && !parent_refs_seen.contains(&change.local_change.remote_branch())
+            {
+                return true;
+            }
+            parent_refs_seen.insert(change.pr.base_ref_name.clone());
+        }
+    }
+    false
+}
+
+static COMMIT_MSG_HOOK_SRC: &str = include_str!("commit-msg");
+static EXECUTABLE_MODE_BITS: u32 = 0o111;
+
+fn install_hook(cfg: &env::InstallHook) -> Result<()> {
+    let mut hook_path = PathBuf::from(env::repo().commondir());
+    hook_path.extend(["hooks", "commit-msg"]);
+    if env::dry_run() {
+        let verb = if cfg.force { "overwrite" } else { "write" };
+        eprintln!("would {verb} {hook_path:?}");
+    }
+    let mut hook_file: File = if cfg.force {
+        File::create(&hook_path)
+            .with_context(|| format!("could not create hook file: {hook_path:?}"))
+    } else {
+        File::create_new(&hook_path)
+            .with_context(|| format!("could not create hook file (try --force): {hook_path:?}"))
+    }?;
+    hook_file
+        .write_all(COMMIT_MSG_HOOK_SRC.as_bytes())
+        .with_context(|| format!("could not write to hook file: {hook_path:?}"))?;
+    hook_file
+        .flush()
+        .with_context(|| format!("could not flush hook file: {hook_path:?}"))?;
+    let mut perms = hook_file
+        .metadata()
+        .with_context(|| format!("could not get metadata for hook file: {hook_path:?}"))?
+        .permissions();
+    perms.set_mode(perms.mode() | EXECUTABLE_MODE_BITS);
+    hook_file
+        .set_permissions(perms)
+        .with_context(|| format!("could not set permissions for hook file: {hook_path:?}"))?;
+    Ok(())
+}
