@@ -58,7 +58,9 @@ impl LocalChange {
         Ok(())
     }
     pub fn fetch_all<'a, I: Iterator<Item = &'a Self>>(iterator: I) -> Result<()> {
-        let refspecs: Vec<String> = iterator.map(|lc| lc.push_refspec()).collect();
+        let refspecs: Vec<String> = iterator
+            .map(|lc| format!("{}:", lc.remote_branch_ref()))
+            .collect();
         if refspecs.is_empty() {
             return Ok(());
         }
