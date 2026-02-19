@@ -9,11 +9,11 @@ use git2::Repository;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::read_to_string;
+use std::fs::{self, read_to_string};
 use std::path::PathBuf;
 use tlrepo::ThreadLocalRepo;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Config {
     remote: String,
     base_branch: String,
@@ -21,23 +21,17 @@ pub struct Config {
     reviewer_groups: Option<HashMap<String, Vec<String>>>,
 }
 
-impl Config {
-    pub fn validate(&self) -> Result<()> {
-        if self.remote.is_empty() {
-            bail!("field `remote` cannot be empty");
-        }
-        if self.base_branch.is_empty() {
-            bail!("field `base_branch` cannot be empty");
-        }
-        if !self.user_branch_prefix.is_empty() && !self.user_branch_prefix.ends_with('/') {
-            bail!("if field `user_branch_prefix` is non-empty it must end with `/`");
-        }
-        Ok(())
-    }
+fn repo_config_path(filename: &str) -> Option<PathBuf> {
+    repo()
+        .workdir()
+        .map(|wd| wd.join(filename))
+        .filter(|p| fs::exists(p).unwrap_or(false))
 }
 
-pub fn config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|cd| cd.join("gd.toml"))
+fn user_config_path(filename: &str) -> Option<PathBuf> {
+    dirs::config_dir()
+        .map(|cd| cd.join(filename))
+        .filter(|p| fs::exists(p).unwrap_or(false))
 }
 
 const CONFIG_TEMPLATE: &str = "\
@@ -49,15 +43,21 @@ const CONFIG_TEMPLATE: &str = "\
 fn read_config() -> Result<Config> {
     let path = std::env::var_os("GD_CONFIG_PATH")
         .map(PathBuf::from)
-        .or_else(config_path)
-        .context("could not find a suitable config path")?;
+        .or_else(|| repo_config_path(".gd.toml"))
+        .or_else(|| repo_config_path("gd.toml"))
+        .or_else(|| user_config_path("gd.toml"));
+    let path = match path {
+        Some(p) => p,
+        None => {
+            // We will catch this later when the config is validated, but we cannot
+            // fail here or -h/--help will not be reached.
+            return Ok(Default::default());
+        }
+    };
     let contents = read_to_string(path.clone())
         .with_context(|| format!("HINT: try this config template:\n\n{CONFIG_TEMPLATE}"))
         .with_context(|| format!("could not read config file: {path:?}"))?;
     let config: Config = toml::from_str(contents.as_ref())
-        .with_context(|| format!("invalid config file: {path:?}"))?;
-    config
-        .validate()
         .with_context(|| format!("invalid config file: {path:?}"))?;
     Ok(config)
 }
@@ -84,6 +84,13 @@ fn read_config() -> Result<Config> {
 ///   and avoiding it in the general case requires never rebasing which is not viable for anything
 ///   but an extremely short-lived review process.
 /// * Currently lacks a lot of polish and documentation.
+///
+/// It reads configuration from the first of the following:
+///
+/// * The file identified by the environment variable `CM_CONFIG_PATH`, if that variable is set.
+/// * The file `.gd.toml` in the git repo's workdir, if it exists.
+/// * The file `gd.toml` in the git repo's workdir, if it exists.
+/// * The file `gd.toml` in platform-dependant user config dir, otherwise.
 #[derive(Parser)]
 #[command(version, verbatim_doc_comment, args_override_self = true)]
 pub struct Cli {
@@ -159,11 +166,24 @@ pub struct InstallHook {
 }
 
 lazy_static! {
+    static ref REPO: ThreadLocalRepo = ThreadLocalRepo::new(".".into());
     static ref CONFIG: Config = read_config().extract();
     static ref CLI: Cli = Cli::parse();
     static ref BASE_BRANCH_REF: String = format!("refs/heads/{}", CLI.globals.base_branch);
-    static ref REPO: ThreadLocalRepo = ThreadLocalRepo::new(".".into());
     static ref EXEC_IDS: RelaxedCounter = RelaxedCounter::new(0);
+}
+
+pub fn validate() -> Result<()> {
+    if remote().is_empty() {
+        bail!("field `remote` cannot be empty");
+    }
+    if base_branch().is_empty() {
+        bail!("field `base_branch` cannot be empty");
+    }
+    if !user_branch_prefix().is_empty() && !user_branch_prefix().ends_with('/') {
+        bail!("if field `user_branch_prefix` is non-empty it must end with `/`");
+    }
+    Ok(())
 }
 
 pub fn cli() -> &'static Cli {

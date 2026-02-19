@@ -22,6 +22,7 @@ pub fn gd() -> Result<()> {
             .context("could not install serial thread pool")
             .extract();
     }
+    env::validate().context("invalid configuration")?;
     match cli.command {
         Command::Push(ref cfg) => push(cfg),
         Command::InstallHook(ref cfg) => install_hook(cfg),
