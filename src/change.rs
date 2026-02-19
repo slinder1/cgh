@@ -76,6 +76,7 @@ impl Change {
             }
             body.push('\n');
         }
+        body.push_str(&format!("- `{}`\n\n<sub>(Note: Closed and merged PRs are not reflected here and PR numbering is not stable.)</sub>\n", env::base_branch()));
         let count = changes.len();
         let position = count
             - index.expect(
