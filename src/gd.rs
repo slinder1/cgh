@@ -75,8 +75,24 @@ fn push(cfg: &env::Push) -> Result<()> {
             }
         }
     }
+    LocalChange::fetch_all(any_changes.iter().filter_map(|ac| match ac {
+        AnyChange::Change(c) => Some(&c.local_change),
+        _ => None,
+    }))
+    .context("could not fetch base branches for all existing prs")?;
+    let interdiffs = any_changes
+        .par_iter()
+        .map(|ac| match ac {
+            AnyChange::Change(c) => c.interdiff(),
+            _ => Ok("".into()),
+        })
+        .collect::<Result<Vec<_>>>()
+        .context("could not build interdiffs")?;
     LocalChange::push_all(any_changes.iter().map(|ac| ac.local_change()))
         .context("could not push all local changes")?;
+    // FIXME: Should try to restore the original branch contents if we fail from this point on. It
+    // would be at least an attempt at being "atomic" about the push, and it would mean we don't
+    // lose the interdiff in a future re-run.
     let changes = any_changes
         .into_par_iter()
         .map(|any_change| {
@@ -114,6 +130,18 @@ fn push(cfg: &env::Push) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()
         .context("could not set pr bases and bodies")?;
+    changes
+        .par_iter()
+        .zip(interdiffs)
+        .map(|(c, diff)| {
+            if !diff.is_empty() {
+                c.pr.add_comment(format!("Changes since last push:\n```diff\n{diff}\n```"))
+            } else {
+                Ok(())
+            }
+        })
+        .collect::<Result<Vec<_>>>()
+        .context("could not add interdiff comments")?;
     changes
         .par_iter()
         .map(|c| c.pr.add_reviewers(reviewers.as_ref()))

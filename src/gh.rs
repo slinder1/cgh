@@ -109,6 +109,14 @@ impl Pr {
         Ok(())
     }
 
+    pub fn add_comment(&self, comment: String) -> Result<()> {
+        let mut cmd = gh();
+        let args = self.args_for("comment", [format!("--body={}", comment)]);
+        cmd.args(args);
+        exec!(dry_return = (), cmd);
+        Ok(())
+    }
+
     pub fn add_reviewers(&self, reviewers: &[String]) -> Result<()> {
         if reviewers.is_empty() {
             return Ok(());

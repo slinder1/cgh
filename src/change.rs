@@ -5,8 +5,9 @@ use crate::env;
 use crate::gh::Pr;
 use crate::util::exec;
 use anyhow::{Context, Result, bail};
-use git2::Oid;
-use git2::message_trailers_bytes;
+use git2::{
+    Commit, DiffFormat, DiffOptions, FileFavor, MergeOptions, Oid, Tree, message_trailers_bytes,
+};
 use std::process::Command;
 
 #[derive(Debug)]
@@ -52,6 +53,14 @@ impl LocalChange {
         exec!(dry_return = (), cmd);
         Ok(())
     }
+    pub fn fetch_all<'a, I: Iterator<Item = &'a Self>>(iterator: I) -> Result<()> {
+        let mut cmd = Command::new("git");
+        let mut args = vec!["fetch".to_string(), env::remote().into()];
+        args.extend(iterator.map(|lc| lc.remote_branch()));
+        cmd.args(args);
+        exec!(dry_return = (), cmd);
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -85,6 +94,74 @@ impl Change {
         self.pr
             .set_title_and_body(&format!("[{position}/{count}]: {title}"), &body)
     }
+    /// Adapted from https://joshcannon.me/2025/04/05/pr-interdiff.html
+    pub fn interdiff(&self) -> Result<String> {
+        let change = self.local_change.id.as_str();
+        let repo = env::repo();
+        let remote_branch = format!("{}/{}", env::remote(), self.local_change.remote_branch());
+        let old_commit = repo
+            .revparse_single(remote_branch.as_ref())
+            .with_context(|| format!("could not parse revspec for remote branch: {remote_branch}"))?
+            .peel_to_commit()
+            .context("revspec for remote branch did not resolve to a commit")?;
+        let new_commit = repo
+            .find_commit(self.local_change.oid)
+            .expect("a local change's commit Oid is not found in the repo now?");
+        let old_merge_base = old_commit
+            .parent(0)
+            .with_context(|| format!("old version of change {change} has no parent commit"))?;
+        let new_merge_base = new_commit
+            .parent(0)
+            .with_context(|| format!("new version of change {change} has no parent commit",))?;
+        let mut merge_opts = MergeOptions::new();
+        merge_opts
+            .find_renames(true)
+            .no_recursive(true)
+            .file_favor(FileFavor::Theirs);
+        let merge_idx = repo
+            .merge_trees(
+                &tree(&old_merge_base)?,
+                &tree(&new_merge_base)?,
+                &tree(&old_commit)?,
+                Some(&merge_opts),
+            )
+            .with_context(|| format!("merge to calculate interdiff for change {change} failed"))?;
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.reverse(true);
+        let diff = repo.diff_tree_to_index(
+            Some(&tree(&new_commit)?),
+            Some(&merge_idx),
+            Some(&mut diff_opts),
+        )?;
+        let mut out = String::new();
+        diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
+            match line.origin() {
+                '+' | '-' | ' ' => out.push(line.origin()),
+                _ => {}
+            }
+            let s = str::from_utf8(line.content()).expect("non-utf8 encoded content in diff");
+            // The file mode and index info is just noise here, but I don't see how to disable both
+            // in the options. Just rely on the output of the 'F' origin "line" and strip
+            // everything but the `diff --git <A> <B>` part.
+            if line.origin() == 'F'
+                && let Some((p, _)) = s.split_once('\n')
+            {
+                out.push_str(p);
+                out.push('\n')
+            } else {
+                out.push_str(s)
+            };
+            true
+        })
+        .with_context(|| format!("failed to generate interdiff for change {change}"))?;
+        Ok(out)
+    }
+}
+
+fn tree<'repo>(commit: &Commit<'repo>) -> Result<Tree<'repo>> {
+    commit
+        .tree()
+        .with_context(|| format!("commit {:?} has no tree?", commit.id()))
 }
 
 pub fn get_local_changes() -> Result<Vec<LocalChange>> {
