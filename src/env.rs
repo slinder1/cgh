@@ -72,6 +72,9 @@ fn read_config() -> Result<Config> {
 /// * Treats one branch as one patch-stack, where each commit maps 1:1 to a PR.
 /// * Uses the same "Change-Id" trailer used by Gerrit. You can install the commit-msg hook from
 ///   a Gerrit instance or use the install-hook subcommand to install an embedded copy.
+/// * Generates "interdiff"-esque diffs for updates to changes and posts them as a comment on your
+///   behalf when you push. This is a bit of a workaround to mitigate the fallout from having to
+///   force-push.
 /// * Quiet by default. No news is good news, but you can also get verbose output or a dry-run.
 /// * Uses the official `gh` tool to interface with the GitHub API, so you don't have
 ///   to go through authenticating another app.
