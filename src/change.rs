@@ -60,7 +60,7 @@ impl LocalChange {
     pub fn fetch_all<'a, I: Iterator<Item = &'a Self>>(iterator: I) -> Result<()> {
         let refspecs: Vec<String> = iterator.map(|lc| lc.push_refspec()).collect();
         if refspecs.is_empty() {
-            bail!("no refs to fetch");
+            return Ok(());
         }
         let mut cmd = Command::new("git");
         let mut args = vec!["fetch".to_string(), env::remote().into()];
