@@ -79,7 +79,7 @@ fn push(cfg: &env::Push) -> Result<()> {
         }
     }
     LocalChange::fetch_all(any_changes.iter().filter_map(|ac| match ac {
-        AnyChange::Change(c) => Some(&c.local_change),
+        AnyChange::Change(c) if c.is_nonempty() => Some(&c.local_change),
         _ => None,
     }))
     .context("could not fetch base branches for all existing prs")?;
@@ -117,7 +117,6 @@ fn push(cfg: &env::Push) -> Result<()> {
     changes
         .par_iter()
         .enumerate()
-        .filter(|(_, c)| c.is_nonempty())
         .map(|(i, c)| {
             let parents = &changes[i + 1..];
             let base = parents
@@ -125,12 +124,14 @@ fn push(cfg: &env::Push) -> Result<()> {
                 .find(|c| c.is_nonempty())
                 .map(|p| p.local_change.remote_branch())
                 .unwrap_or_else(|| env::base_branch().to_owned());
-            c.pr.set_base(base.as_ref()).with_context(|| {
-                format!(
-                    "could not retarget pr {} to branch: {:?}",
-                    c.pr.number, base,
-                )
-            })?;
+            if c.is_nonempty() {
+                c.pr.set_base(base.as_ref()).with_context(|| {
+                    format!(
+                        "could not retarget pr {} to branch: {:?}",
+                        c.pr.number, base,
+                    )
+                })?;
+            }
             c.render_pr_ui(&changes)
                 .context("could not render pseudo-ui in pr title/body")
         })
@@ -167,7 +168,9 @@ fn push(cfg: &env::Push) -> Result<()> {
 fn detect_cycles(any_changes: &[AnyChange]) -> bool {
     let mut parent_refs_seen: HashSet<String> = HashSet::new();
     for any_change in any_changes.iter() {
-        if let AnyChange::Change(change) = any_change {
+        if let AnyChange::Change(change) = any_change
+            && change.local_change.is_nonempty()
+        {
             if !parent_refs_seen.is_empty()
                 && !parent_refs_seen.contains(&change.local_change.remote_branch())
             {
