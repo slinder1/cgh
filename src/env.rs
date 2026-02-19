@@ -66,8 +66,9 @@ fn read_config() -> Result<Config> {
 ///
 /// Main features:
 ///
-/// * Never touches your local repo. The tool only reads from your local repo and attempts to
-///   mirror it to GitHub by pushing refs, create PRs, and "stacking" them.
+/// * Never touches your local branches. The tool only reads from your local branch and attempts to
+///   mirror it to GitHub by: fetching remote tracking branches, force-pushing namespaced refs,
+///   creating PRs, and maintaining PR bodies and comments to present a pseudo-UI for the stack.
 /// * Treats one branch as one patch-stack, where each commit maps 1:1 to a PR.
 /// * Uses the same "Change-Id" trailer used by Gerrit. You can install the commit-msg hook from
 ///   a Gerrit instance or use the install-hook subcommand to install an embedded copy.

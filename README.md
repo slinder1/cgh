@@ -6,7 +6,7 @@ See `--help` for more.
 
 The most compelling alternative to `gd` is https://github.com/ejoffe/spr which differs in a few ways:
 
-* `spr` will modify your local repo by default for logically non-destructive operations (i.e. when you try to `update` the remote)
+* `spr` will modify your local branches by default for logically non-destructive operations (i.e. when you try to `update` the remote)
 * `spr` won't use Gerrit `Change-Id:`, and is very particular about the format of its ID; `gd` allows any string and uses the `Change-Id:` trailer
 * `spr` does not seem to have a `dry-run` option, so modifications aren't forseeable
 * `spr` installs itself as a git subcommand (this is really just an aesthetic quibble, but I don't think it is primarily a `git` tool, it is a GitHub tool, and exists only to patch a deficiency in GitHub as a service)
