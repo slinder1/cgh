@@ -91,6 +91,9 @@ fn push(cfg: &env::Push) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()
         .context("could not build interdiffs")?;
+    // FIXME: Should we push a slightly modified version of the branch with empty commits stripped
+    // out? It would clean up the "Commits" tab on the PRs, and make the final merge message
+    // correct without edits.
     LocalChange::push_all(any_changes.iter().map(|ac| ac.local_change()))
         .context("could not push all local changes")?;
     // FIXME: Should try to restore the original branch contents if we fail from this point on. It
