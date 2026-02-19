@@ -79,7 +79,9 @@ fn read_config() -> Result<Config> {
 /// * Does not even try to avoid force pushes. Review comments will regularly end up marked as
 ///   stale with no relation to the latest patch contents. This seems to happen frequently anyway,
 ///   and avoiding it in the general case requires never rebasing which is not viable for anything
-///   but an extremely short-lived review process.
+///   but an extremely short-lived review process. Ideas about how to potentially resolve this is
+///   documented at https://github.com/slinder1/gd/blob/main/DESIGN.md and contributions are
+///   welcome!
 /// * Loses track of merged/closed PRs. This may be mildly confusing, but is more-or-less by
 ///   design: the change commit which corresponds to a merged PR will naturally disappear from the
 ///   branch on rebase. As a sort of workaround, if you rebase using `--reapply-cherry-picks
