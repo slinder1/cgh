@@ -34,12 +34,6 @@ fn user_config_path(filename: &str) -> Option<PathBuf> {
         .filter(|p| fs::exists(p).unwrap_or(false))
 }
 
-const CONFIG_TEMPLATE: &str = "\
-  \tremote = \"origin\"\n\
-  \tbase_branch = \"main\"\n\
-  \tuser_branch_prefix = \"users/$USER/\"
-";
-
 fn read_config() -> Result<Config> {
     let path = std::env::var_os("GD_CONFIG_PATH")
         .map(PathBuf::from)
@@ -55,7 +49,6 @@ fn read_config() -> Result<Config> {
         }
     };
     let contents = read_to_string(path.clone())
-        .with_context(|| format!("HINT: try this config template:\n\n{CONFIG_TEMPLATE}"))
         .with_context(|| format!("could not read config file: {path:?}"))?;
     let config: Config = toml::from_str(contents.as_ref())
         .with_context(|| format!("invalid config file: {path:?}"))?;
@@ -98,6 +91,12 @@ fn read_config() -> Result<Config> {
 /// * The file `.gd.toml` in the git repo's workdir, if it exists.
 /// * The file `gd.toml` in the git repo's workdir, if it exists.
 /// * The file `gd.toml` in platform-dependant user config dir, otherwise.
+///
+/// An example config file is:
+///
+///     remote = "origin"
+///     base_branch = "main"
+///     user_branch_prefix = "users/$USER/"
 #[derive(Parser)]
 #[command(version, verbatim_doc_comment, args_override_self = true)]
 pub struct Cli {
