@@ -75,6 +75,9 @@ impl LocalChange {
         let parent = commit.parent(0)?;
         Ok(tree(&commit)?.id() == tree(&parent)?.id())
     }
+    pub fn is_nonempty(&self) -> bool {
+        !self.is_empty().unwrap_or(false)
+    }
 }
 
 #[derive(Debug)]
@@ -169,6 +172,9 @@ impl Change {
         })
         .with_context(|| format!("failed to generate interdiff for change {change}"))?;
         Ok(out)
+    }
+    pub fn is_nonempty(&self) -> bool {
+        self.local_change.is_nonempty()
     }
 }
 

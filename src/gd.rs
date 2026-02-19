@@ -47,7 +47,7 @@ fn push(cfg: &env::Push) -> Result<()> {
         any_changes.push(match prs_by_change_id.remove(&local_change.id) {
             None => AnyChange::LocalChange(local_change),
             Some(pr) => {
-                if pr.in_state(PrState::Merged) && !local_change.is_empty().unwrap_or(false) {
+                if pr.in_state(PrState::Merged) && local_change.is_nonempty() {
                     bail!(
                         "pr {} with Change-Id {} already merged",
                         pr.number,
@@ -61,7 +61,9 @@ fn push(cfg: &env::Push) -> Result<()> {
     // FIXME: This is pretty coarse-grained, could find the minimal set.
     if detect_cycles(&any_changes) {
         for any_change in any_changes.iter() {
-            if let AnyChange::Change(change) = any_change {
+            if let AnyChange::Change(change) = any_change
+                && change.is_nonempty()
+            {
                 change
                     .pr
                     .mark_ready(false)
@@ -109,24 +111,24 @@ fn push(cfg: &env::Push) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()
         .context("could not create new prs")?;
-    let mut padded: Vec<Option<&Change>> = changes.iter().map(Some).collect();
-    padded.push(None);
-    padded
-        .par_windows(2)
-        .map(|w| {
-            let change = w[0].expect("first in window of padded vec is None?");
-            let parent = w[1];
-            let base = parent
+    changes
+        .par_iter()
+        .enumerate()
+        .filter(|(_, c)| c.is_nonempty())
+        .map(|(i, c)| {
+            let parents = &changes[i + 1..];
+            let base = parents
+                .iter()
+                .find(|c| c.is_nonempty())
                 .map(|p| p.local_change.remote_branch())
                 .unwrap_or_else(|| env::base_branch().to_owned());
-            change.pr.set_base(base.as_ref()).with_context(|| {
+            c.pr.set_base(base.as_ref()).with_context(|| {
                 format!(
                     "could not retarget pr {} to branch: {:?}",
-                    change.pr.number, base,
+                    c.pr.number, base,
                 )
             })?;
-            change
-                .render_pr_ui(&changes)
+            c.render_pr_ui(&changes)
                 .context("could not render pseudo-ui in pr title/body")
         })
         .collect::<Result<Vec<_>>>()
@@ -134,6 +136,7 @@ fn push(cfg: &env::Push) -> Result<()> {
     changes
         .par_iter()
         .zip(interdiffs)
+        .filter(|(c, _)| c.is_nonempty())
         .map(|(c, diff)| {
             if !diff.is_empty() {
                 c.pr.add_comment(format!("Changes since last push:\n```diff\n{diff}\n```"))
@@ -145,11 +148,13 @@ fn push(cfg: &env::Push) -> Result<()> {
         .context("could not add interdiff comments")?;
     changes
         .par_iter()
+        .filter(|c| c.is_nonempty())
         .map(|c| c.pr.add_reviewers(reviewers.as_ref()))
         .collect::<Result<Vec<_>>>()
         .context("could not add pr reviewers")?;
     changes
         .par_iter()
+        .filter(|c| c.is_nonempty())
         .map(|c| c.pr.mark_ready(true))
         .collect::<Result<Vec<_>>>()
         .context("could not mark prs as ready")?;
