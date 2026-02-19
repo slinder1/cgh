@@ -82,7 +82,9 @@ fn read_config() -> Result<Config> {
 ///   but an extremely short-lived review process.
 /// * Loses track of merged/closed PRs. This may be mildly confusing, but is more-or-less by
 ///   design: the change commit which corresponds to a merged PR will naturally disappear from the
-///   branch on rebase.
+///   branch on rebase. As a sort of workaround, if you rebase using `--reapply-cherry-picks
+///   --empty=keep` you can maintain the stack at the cost of having empty commits in your local
+///   stack.
 /// * Currently lacks a lot of polish and documentation.
 ///
 /// It reads configuration from the first of the following:
