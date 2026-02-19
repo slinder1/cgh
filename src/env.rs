@@ -87,6 +87,9 @@ fn read_config() -> Result<Config> {
 ///   stale with no relation to the latest patch contents. This seems to happen frequently anyway,
 ///   and avoiding it in the general case requires never rebasing which is not viable for anything
 ///   but an extremely short-lived review process.
+/// * Loses track of merged/closed PRs. This may be mildly confusing, but is more-or-less by
+///   design: the change commit which corresponds to a merged PR will naturally disappear from the
+///   branch on rebase.
 /// * Currently lacks a lot of polish and documentation.
 ///
 /// It reads configuration from the first of the following:
