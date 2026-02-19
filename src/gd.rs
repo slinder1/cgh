@@ -47,7 +47,7 @@ fn push(cfg: &env::Push) -> Result<()> {
         any_changes.push(match prs_by_change_id.remove(&local_change.id) {
             None => AnyChange::LocalChange(local_change),
             Some(pr) => {
-                if pr.in_state(PrState::Merged) {
+                if pr.in_state(PrState::Merged) && !local_change.is_empty().unwrap_or(false) {
                     bail!(
                         "pr {} with Change-Id {} already merged",
                         pr.number,

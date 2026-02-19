@@ -69,6 +69,12 @@ impl LocalChange {
         exec!(dry_return = (), cmd);
         Ok(())
     }
+    pub fn is_empty(&self) -> Result<bool> {
+        let repo = env::repo();
+        let commit = repo.find_commit(self.oid)?;
+        let parent = commit.parent(0)?;
+        Ok(tree(&commit)?.id() == tree(&parent)?.id())
+    }
 }
 
 #[derive(Debug)]
