@@ -167,6 +167,9 @@ pub struct Push {
     ///     public = [ "dev1", "dev3", "dev4" ]
     #[arg(short, long, action = ArgAction::Set, value_delimiter = ',')]
     pub reviewer_groups: Vec<String>,
+    #[arg(short, long)]
+    /// Leave all the PRs as drafts
+    pub draft: bool,
 }
 
 #[derive(Args)]
