@@ -22,8 +22,9 @@ pub struct Config {
 }
 
 fn repo_config_path(filename: &str) -> Option<PathBuf> {
-    repo()
-        .workdir()
+    REPO.get()
+        .ok()
+        .and_then(|r| r.workdir())
         .map(|wd| wd.join(filename))
         .filter(|p| fs::exists(p).unwrap_or(false))
 }
