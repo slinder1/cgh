@@ -58,25 +58,35 @@ fn push(cfg: &env::Push) -> Result<()> {
             }
         });
     }
-    // FIXME: This is pretty coarse-grained, could find the minimal set.
-    if detect_cycles(&any_changes) {
-        for any_change in any_changes.iter() {
-            if let AnyChange::Change(change) = any_change
-                && change.is_nonempty()
-            {
-                change
-                    .pr
-                    .mark_ready(false)
-                    .with_context(|| format!("could not mark pr as draft: {:?}", change.pr))?;
-                change.pr.set_base(env::base_branch()).with_context(|| {
-                    format!(
-                        "could not retarget pr {} to base branch: {:?}",
-                        change.pr.number,
-                        env::base_branch(),
-                    )
-                })?;
-            }
-        }
+    let has_cycles = detect_cycles(&any_changes);
+    if has_cycles || cfg.draft {
+        any_changes
+            .par_iter()
+            .filter_map(|ac| {
+                if let AnyChange::Change(c) = ac
+                    && c.is_nonempty()
+                {
+                    Some(c)
+                } else {
+                    None
+                }
+            })
+            .map(|c| {
+                c.pr.mark_ready(false)
+                    .with_context(|| format!("could not mark pr as draft: {:?}", c.pr))?;
+                // FIXME: This is pretty coarse-grained, could find the minimal set.
+                if has_cycles {
+                    c.pr.set_base(env::base_branch()).with_context(|| {
+                        format!(
+                            "could not retarget pr {} to base branch: {:?}",
+                            c.pr.number,
+                            env::base_branch(),
+                        )
+                    })?;
+                }
+                Ok(())
+            })
+            .collect::<Result<Vec<_>>>()?;
     }
     LocalChange::fetch_all(any_changes.iter().filter_map(|ac| match ac {
         AnyChange::Change(c) if c.is_nonempty() => Some(&c.local_change),
@@ -156,12 +166,14 @@ fn push(cfg: &env::Push) -> Result<()> {
         .map(|c| c.pr.add_reviewers(reviewers.as_ref()))
         .collect::<Result<Vec<_>>>()
         .context("could not add pr reviewers")?;
-    changes
-        .par_iter()
-        .filter(|c| c.is_nonempty())
-        .map(|c| c.pr.mark_ready(true))
-        .collect::<Result<Vec<_>>>()
-        .context("could not mark prs as ready")?;
+    if !cfg.draft {
+        changes
+            .par_iter()
+            .filter(|c| c.is_nonempty())
+            .map(|c| c.pr.mark_ready(true))
+            .collect::<Result<Vec<_>>>()
+            .context("could not mark prs as ready")?;
+    }
     Ok(())
 }
 
