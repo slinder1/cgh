@@ -4,7 +4,7 @@
 use crate::change::{self, AnyChange, Change, LocalChange};
 use crate::env::{self, Command};
 use crate::gh::{self, Pr, PrState};
-use crate::util::Extract;
+use crate::util::{Extract, RepoExt};
 use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -30,6 +30,9 @@ pub fn gd() -> Result<()> {
 }
 
 fn push(cfg: &env::Push) -> Result<()> {
+    let repo = env::repo();
+    let branch = repo.head_branch().context("HEAD must be a branch")?;
+    let branch_desc = repo.branch_desc(branch).ok();
     let mut reviewers = vec![];
     for group_key in cfg.reviewer_groups.iter() {
         let group = env::reviewer_groups()
@@ -142,7 +145,7 @@ fn push(cfg: &env::Push) -> Result<()> {
                     )
                 })?;
             }
-            c.render_pr_ui(&changes)
+            c.render_pr_ui(&changes, branch_desc.as_deref())
                 .context("could not render pseudo-ui in pr title/body")
         })
         .collect::<Result<Vec<_>>>()
