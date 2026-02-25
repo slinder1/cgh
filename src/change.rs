@@ -89,7 +89,7 @@ pub struct Change {
 }
 
 impl Change {
-    pub fn render_pr_ui(&self, changes: &[Self]) -> Result<()> {
+    pub fn render_pr_ui(&self, changes: &[Self], branch_desc: Option<&str>) -> Result<()> {
         let commit = env::repo().find_commit(self.local_change.oid)?;
         let mut index = None;
         let title = String::from(commit.summary().context("commit has no summary")?);
@@ -110,8 +110,13 @@ impl Change {
             - index.expect(
                 "render_pr_ui asked to render into a stack of changes which does not contain self?",
             );
+        let prefix = branch_desc
+            .map(|d| d.trim())
+            .filter(|d| !d.is_empty())
+            .map(|d| format!("{d}: "))
+            .unwrap_or_else(|| "".into());
         self.pr
-            .set_title_and_body(&format!("[{position}/{count}]: {title}"), &body)
+            .set_title_and_body(&format!("[{prefix}{position}/{count}]: {title}"), &body)
     }
     /// Adapted from https://joshcannon.me/2025/04/05/pr-interdiff.html
     pub fn interdiff(&self) -> Result<String> {

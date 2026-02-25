@@ -83,11 +83,11 @@ fn read_config() -> Result<Config> {
 ///   but an extremely short-lived review process. Ideas about how to potentially resolve this is
 ///   documented at https://github.com/slinder1/gd/blob/main/DESIGN.md and contributions are
 ///   welcome!
-/// * Loses track of merged/closed PRs. This may be mildly confusing, but is more-or-less by
-///   design: the change commit which corresponds to a merged PR will naturally disappear from the
-///   branch on rebase. As a sort of workaround, if you rebase using `--reapply-cherry-picks
-///   --empty=keep` you can maintain the stack at the cost of having empty commits in your local
-///   stack.
+/// * Can lose track of merged/closed PR if the user is not careful during rebases. This may be
+///   mildly confusing, but is more-or-less by design: the change commit which corresponds to a
+///   merged PR will naturally disappear from the branch on rebase. To avoid this, you can rebase
+///   using e.g. `--reapply-cherry-picks --empty=keep` which will maintain the stack at the expense
+///   of having empty commits in your local stack.
 /// * Currently lacks a lot of polish and documentation.
 ///
 /// It reads configuration from the first of the following:
@@ -102,6 +102,13 @@ fn read_config() -> Result<Config> {
 ///     remote = "origin"
 ///     base_branch = "main"
 ///     user_branch_prefix = "users/$USER/"
+///
+/// The title of PR number `N` in a series of `M` commits is prefixed with:
+///
+/// * `[<branch-desc-first-line>: N/M]: ` if the branch has a description,
+///   editable via `git branch --edit-description`, or
+/// * `[N/M]: ` otherwise.
+///
 #[derive(Parser)]
 #[command(version, verbatim_doc_comment, args_override_self = true)]
 pub struct Cli {

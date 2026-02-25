@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::{Context, Result, bail};
+use git2::{Branch, Repository};
 use std::fmt::Debug;
 use std::process::{Command, Output};
 
@@ -58,5 +59,39 @@ impl<T, E: Debug> Extract for std::result::Result<T, E> {
                 std::process::exit(-1);
             }
         }
+    }
+}
+
+pub trait RepoExt {
+    fn head_branch<'repo>(&'repo self) -> Result<Branch<'repo>>;
+    fn branch_desc(&self, str: Branch) -> Result<String>;
+}
+
+impl RepoExt for Repository {
+    fn head_branch<'repo>(&'repo self) -> Result<Branch<'repo>> {
+        let branch = self.head().context("unknown HEAD")?;
+        if !branch.is_branch() {
+            bail!("HEAD is not a branch");
+        }
+        Ok(Branch::wrap(branch))
+    }
+    fn branch_desc(&self, branch: Branch) -> Result<String> {
+        let branch_name = branch
+            .name()
+            .context("HEAD branch has no name")?
+            .context("HEAD branch name is not valid utf-8")?;
+        let repo_config = self.config().context("repo has no config")?;
+        let config_key = format!("branch.{branch_name}.description");
+        let config_entry = repo_config
+            .get_entry(config_key.as_str())
+            .context("no branch description")?;
+        let full_desc = config_entry
+            .value()
+            .context("branch description is not valid utf8")?;
+        Ok(full_desc
+            .split('\n')
+            .next()
+            .unwrap_or(full_desc)
+            .to_string())
     }
 }
