@@ -140,6 +140,7 @@ impl Pr {
         let args = vec![
             "pr".into(),
             "create".into(),
+            REPO_ARG.clone(),
             "--draft".into(),
             format!("--base={base}"),
             format!("--title={title}"),
