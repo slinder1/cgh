@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 mod change;
+mod cli;
 mod env;
 mod gd;
 mod gh;
