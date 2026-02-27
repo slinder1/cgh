@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 use crate::change::{self, AnyChange, Change, LocalChange};
-use crate::env::{self, Command};
+use crate::cli;
+use crate::env;
 use crate::gh::{self, Pr, PrState};
 use crate::util::{Extract, RepoExt};
 use anyhow::{Context, Result, bail};
@@ -24,12 +25,12 @@ pub fn gd() -> Result<()> {
     }
     env::validate().context("invalid configuration")?;
     match cli.command {
-        Command::Push(ref cfg) => push(cfg),
-        Command::InstallHook(ref cfg) => install_hook(cfg),
+        cli::Command::Push(ref cfg) => push(cfg),
+        cli::Command::InstallHook(ref cfg) => install_hook(cfg),
     }
 }
 
-fn push(cfg: &env::Push) -> Result<()> {
+fn push(cfg: &cli::Push) -> Result<()> {
     let repo = env::repo();
     let branch = repo.head_branch().context("HEAD must be a branch")?;
     let branch_desc = repo.branch_desc(branch).ok();
@@ -200,7 +201,7 @@ fn detect_cycles(any_changes: &[AnyChange]) -> bool {
 static COMMIT_MSG_HOOK_SRC: &str = include_str!("commit-msg");
 static EXECUTABLE_MODE_BITS: u32 = 0o111;
 
-fn install_hook(cfg: &env::InstallHook) -> Result<()> {
+fn install_hook(cfg: &cli::InstallHook) -> Result<()> {
     let mut hook_path = PathBuf::from(env::repo().commondir());
     hook_path.extend(["hooks", "commit-msg"]);
     if env::dry_run() {
