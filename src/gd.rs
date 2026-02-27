@@ -206,6 +206,7 @@ fn install_hook(cfg: &env::InstallHook) -> Result<()> {
     if env::dry_run() {
         let verb = if cfg.force { "overwrite" } else { "write" };
         eprintln!("would {verb} {hook_path:?}");
+        return Ok(());
     }
     let mut hook_file: File = if cfg.force {
         File::create(&hook_path)
