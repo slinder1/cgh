@@ -9,7 +9,9 @@ use git2::message_trailers_strs;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::io::Write;
 use std::process::Command;
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +34,41 @@ pub enum PrState {
 
 fn gh() -> Command {
     Command::new("gh")
+}
+
+/// A guess at a reasonable size for one arg to avoid making the command-line
+/// too long. Anything longer than this will use a tempfile.
+const MAX_INLINE_ARG_LENGTH: usize = 0x1000;
+
+struct ArgInlineOrFile {
+    arg_base: &'static str,
+    file: Option<NamedTempFile>,
+}
+impl ArgInlineOrFile {
+    pub fn new(arg_base: &'static str) -> ArgInlineOrFile {
+        ArgInlineOrFile {
+            arg_base,
+            file: None,
+        }
+    }
+    pub fn arg<S: AsRef<str>>(&mut self, contents: S) -> Result<String> {
+        let ret: String;
+        let arg_base = self.arg_base;
+        let contents = contents.as_ref();
+        let contents_bytes = contents.as_bytes();
+        if contents_bytes.len() > MAX_INLINE_ARG_LENGTH {
+            let mut file = NamedTempFile::new()?;
+            file.write_all(contents_bytes)?;
+            let path = file.path().to_str().context("arg file path is not utf-8")?;
+            ret = format!("--{arg_base}-file={path}");
+            if self.file.replace(file).is_some() {
+                bail!("ArgInlineOrFile was reused");
+            }
+        } else {
+            ret = format!("--{arg_base}={contents}");
+        }
+        Ok(ret)
+    }
 }
 
 lazy_static! {
@@ -78,11 +115,9 @@ impl Pr {
     }
 
     pub fn set_title_and_body(&self, title: &str, body: &str) -> Result<()> {
+        let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
-        let args = self.args_for(
-            "edit",
-            [format!("--title={title}"), format!("--body={body}")],
-        );
+        let args = self.args_for("edit", [format!("--title={title}"), body_arg.arg(body)?]);
         cmd.args(args);
         exec!(dry_return = (), cmd);
         Ok(())
@@ -109,9 +144,11 @@ impl Pr {
         Ok(())
     }
 
-    pub fn add_comment(&self, comment: String) -> Result<()> {
+    pub fn add_details_comment(&self, summary: String, body: String) -> Result<()> {
+        let comment = format!("<details>\n<summary>{summary}</summary>\n\n{body}\n</details>");
+        let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
-        let args = self.args_for("comment", [format!("--body={}", comment)]);
+        let args = self.args_for("comment", [body_arg.arg(comment)?]);
         cmd.args(args);
         exec!(dry_return = (), cmd);
         Ok(())
@@ -136,6 +173,7 @@ impl Pr {
         let title = commit.summary().context("commit has no summary")?;
         let body = commit.body().context("commit has no body")?;
         let base = env::base_branch();
+        let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
         let args = vec![
             "pr".into(),
@@ -144,7 +182,7 @@ impl Pr {
             "--draft".into(),
             format!("--base={base}"),
             format!("--title={title}"),
-            format!("--body={body}"),
+            body_arg.arg(body)?,
             format!("--head={remote_branch_ref}"),
         ];
         cmd.args(args);

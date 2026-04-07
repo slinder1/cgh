@@ -157,7 +157,10 @@ fn push(cfg: &cli::Push) -> Result<()> {
         .filter(|(c, _)| c.is_nonempty())
         .map(|(c, diff)| {
             if !diff.is_empty() {
-                c.pr.add_comment(format!("Changes since last push:\n```diff\n{diff}\n```"))
+                c.pr.add_details_comment(
+                    "Changes since last push (click to expand):".to_string(),
+                    format!("```diff\n{diff}\n```"),
+                )
             } else {
                 Ok(())
             }
