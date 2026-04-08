@@ -87,7 +87,12 @@ impl LocalChange {
             bail!("no refs to push");
         }
         let mut cmd = Command::new("git");
-        let mut args = vec!["push".to_string(), env::remote().into(), "--force".into()];
+        let mut args = vec![
+            "push".to_string(),
+            env::remote().into(),
+            "--force".into(),
+            "--atomic".into(),
+        ];
         args.extend(refspecs);
         cmd.args(args);
         exec!(dry_return = (), cmd);
