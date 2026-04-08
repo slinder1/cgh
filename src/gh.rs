@@ -145,7 +145,9 @@ impl Pr {
     }
 
     pub fn add_details_comment(&self, summary: String, body: String) -> Result<()> {
-        let comment = format!("<details>\n<summary>{summary}</summary>\n\n{body}\n</details>");
+        let comment = format!(
+            "<details>\n<summary>🛠️ {summary} (click to expand):</summary>\n\n{body}\n</details>"
+        );
         let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
         let args = self.args_for("comment", [body_arg.arg(comment)?]);

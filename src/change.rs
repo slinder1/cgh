@@ -6,7 +6,8 @@ use crate::gh::Pr;
 use crate::util::exec;
 use anyhow::{Context, Result, bail};
 use git2::{
-    Commit, DiffFormat, DiffOptions, FileFavor, MergeOptions, Oid, Tree, message_trailers_bytes,
+    Commit, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions, FileFavor, MergeOptions, Oid,
+    Tree, message_trailers_bytes,
 };
 use std::process::Command;
 
@@ -23,6 +24,41 @@ impl AnyChange {
             AnyChange::Change(change) => &change.local_change,
         }
     }
+    pub fn diff(&self) -> Result<Diff> {
+        Ok(match self {
+            AnyChange::LocalChange(local_change) => Diff::InitialDiff(local_change.diff()?),
+            AnyChange::Change(change) => Diff::InterDiff(change.interdiff()?),
+        })
+    }
+}
+
+pub enum Diff {
+    InitialDiff(String),
+    InterDiff(String),
+}
+
+type DiffPrinter<'a> = Box<dyn FnMut(DiffDelta, Option<DiffHunk>, DiffLine) -> bool + 'a>;
+
+fn diff_printer<'a>(out: &'a mut String) -> DiffPrinter<'a> {
+    Box::new(|_delta, _hunk, line| {
+        match line.origin() {
+            '+' | '-' | ' ' => out.push(line.origin()),
+            _ => {}
+        }
+        let s = str::from_utf8(line.content()).expect("non-utf8 encoded content in diff");
+        // The file mode and index info is just noise here, but I don't see how to disable both
+        // in the options. Just rely on the output of the 'F' origin "line" and strip
+        // everything but the `diff --git <A> <B>` part.
+        if line.origin() == 'F'
+            && let Some((p, _)) = s.split_once('\n')
+        {
+            out.push_str(p);
+            out.push('\n')
+        } else {
+            out.push_str(s)
+        };
+        true
+    })
 }
 
 #[derive(Debug)]
@@ -79,6 +115,27 @@ impl LocalChange {
     }
     pub fn is_nonempty(&self) -> bool {
         !self.is_empty().unwrap_or(false)
+    }
+    pub fn diff(&self) -> Result<String> {
+        let change = self.id.as_str();
+        let repo = env::repo();
+        let commit = repo
+            .find_commit(self.oid)
+            .expect("a local change's commit Oid is not found in the repo now?");
+        let parent = commit
+            .parent(0)
+            .with_context(|| format!("change {change} has no parent commit",))?;
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.reverse(true);
+        let diff = repo.diff_tree_to_tree(
+            Some(&tree(&commit)?),
+            Some(&tree(&parent)?),
+            Some(&mut diff_opts),
+        )?;
+        let mut out = String::new();
+        diff.print(DiffFormat::Patch, diff_printer(&mut out))
+            .with_context(|| format!("failed to generate interdiff for change {change}"))?;
+        Ok(out)
     }
 }
 
@@ -158,26 +215,8 @@ impl Change {
             Some(&mut diff_opts),
         )?;
         let mut out = String::new();
-        diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
-            match line.origin() {
-                '+' | '-' | ' ' => out.push(line.origin()),
-                _ => {}
-            }
-            let s = str::from_utf8(line.content()).expect("non-utf8 encoded content in diff");
-            // The file mode and index info is just noise here, but I don't see how to disable both
-            // in the options. Just rely on the output of the 'F' origin "line" and strip
-            // everything but the `diff --git <A> <B>` part.
-            if line.origin() == 'F'
-                && let Some((p, _)) = s.split_once('\n')
-            {
-                out.push_str(p);
-                out.push('\n')
-            } else {
-                out.push_str(s)
-            };
-            true
-        })
-        .with_context(|| format!("failed to generate interdiff for change {change}"))?;
+        diff.print(DiffFormat::Patch, diff_printer(&mut out))
+            .with_context(|| format!("failed to generate interdiff for change {change}"))?;
         Ok(out)
     }
     pub fn is_nonempty(&self) -> bool {
