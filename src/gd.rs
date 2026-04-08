@@ -1,7 +1,7 @@
 // Copyright © 2026 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-use crate::change::{self, AnyChange, Change, LocalChange};
+use crate::change::{self, AnyChange, Change, Diff, LocalChange};
 use crate::cli;
 use crate::env;
 use crate::gh::{self, Pr, PrState};
@@ -97,14 +97,11 @@ fn push(cfg: &cli::Push) -> Result<()> {
         _ => None,
     }))
     .context("could not fetch base branches for all existing prs")?;
-    let interdiffs = any_changes
+    let diffs = any_changes
         .par_iter()
-        .map(|ac| match ac {
-            AnyChange::Change(c) => c.interdiff(),
-            _ => Ok("".into()),
-        })
+        .map(|ac| ac.diff())
         .collect::<Result<Vec<_>>>()
-        .context("could not build interdiffs")?;
+        .context("could not build diffs")?;
     // FIXME: Should we push a slightly modified version of the branch with empty commits stripped
     // out? It would clean up the "Commits" tab on the PRs, and make the final merge message
     // correct without edits.
@@ -153,17 +150,13 @@ fn push(cfg: &cli::Push) -> Result<()> {
         .context("could not set pr bases and bodies")?;
     changes
         .par_iter()
-        .zip(interdiffs)
-        .filter(|(c, _)| c.is_nonempty())
+        .zip(diffs)
         .map(|(c, diff)| {
-            if !diff.is_empty() {
-                c.pr.add_details_comment(
-                    "Changes since last push (click to expand):".to_string(),
-                    format!("```diff\n{diff}\n```"),
-                )
-            } else {
-                Ok(())
-            }
+            let (summary, body) = match diff {
+                Diff::InitialDiff(text) => ("Initial changes", text),
+                Diff::InterDiff(text) => ("Changes since last push", text),
+            };
+            c.pr.add_details_comment(summary.to_string(), format!("```diff\n{body}\n```"))
         })
         .collect::<Result<Vec<_>>>()
         .context("could not add interdiff comments")?;
