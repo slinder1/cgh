@@ -1,7 +1,7 @@
 // Copyright © 2026 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-use crate::change::LocalChange;
+use crate::change::{Diff, LocalChange};
 use crate::env;
 use crate::util::{Extract, exec};
 use anyhow::{Context, Result, bail};
@@ -144,10 +144,18 @@ impl Pr {
         Ok(())
     }
 
-    pub fn add_details_comment(&self, summary: String, body: String) -> Result<()> {
-        let comment = format!(
-            "<details>\n<summary>🛠️ {summary} (click to expand):</summary>\n\n{body}\n</details>"
-        );
+    pub fn add_details_comment(&self, diff: &Diff) -> Result<()> {
+        let (summary, changes) = match diff {
+            Diff::InitialDiff(text) => ("Initial changes", text),
+            Diff::InterDiff(text) => ("Changes since last push", text),
+        };
+        let comment = if changes.is_empty() {
+            format!("🛠️ {summary}: none (likely a rebase)")
+        } else {
+            format!(
+                "<details>\n<summary>🛠️ {summary} (click to expand):</summary>\n\n```diff\n{changes}\n```\n</details>"
+            )
+        };
         let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
         let args = self.args_for("comment", [body_arg.arg(comment)?]);
