@@ -1,7 +1,7 @@
 // Copyright © 2026 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-use crate::change::{self, AnyChange, Change, Diff, LocalChange};
+use crate::change::{self, AnyChange, Change, LocalChange};
 use crate::cli;
 use crate::env;
 use crate::gh::{self, Pr, PrState};
@@ -151,13 +151,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
     changes
         .par_iter()
         .zip(diffs)
-        .map(|(c, diff)| {
-            let (summary, body) = match diff {
-                Diff::InitialDiff(text) => ("Initial changes", text),
-                Diff::InterDiff(text) => ("Changes since last push", text),
-            };
-            c.pr.add_details_comment(summary.to_string(), format!("```diff\n{body}\n```"))
-        })
+        .map(|(c, diff)| c.pr.add_details_comment(&diff))
         .collect::<Result<Vec<_>>>()
         .context("could not add interdiff comments")?;
     changes
