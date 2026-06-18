@@ -1,6 +1,6 @@
 [package]
 name = "cgh"
-version = "0.6.0"
+version = "0.7.0"
 license = "MIT"
 edition = "2024"
 description = "GitHub stacked-PR builder for those who miss Gerrit"
