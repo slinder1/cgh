@@ -103,6 +103,8 @@ pub enum Command {
     /// destroyed, and no commits are touched. All mutation occurs exclusively on the `$remote`.
     #[command(visible_alias = "p")]
     Push(Push),
+    /// Print the PR URL of the top-most change which already has one.
+    Url(Url),
     /// Install a commit-msg hook in the current git repo to create `Change-Id:` trailers.
     InstallHook(InstallHook),
 }
@@ -122,6 +124,9 @@ pub struct Push {
     /// Leave all the PRs as drafts
     pub draft: bool,
 }
+
+#[derive(Args)]
+pub struct Url;
 
 #[derive(Args)]
 pub struct InstallHook {

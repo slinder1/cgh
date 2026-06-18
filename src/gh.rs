@@ -72,24 +72,27 @@ impl ArgInlineOrFile {
 }
 
 lazy_static! {
-    static ref REPO_ARG: String = build_repo_arg().extract();
+    static ref REPO_URL: String = build_repo_url().extract();
+    static ref REPO_ARG: String = format!("--repo={}", REPO_URL.as_str());
 }
-fn build_repo_arg() -> Result<String> {
+// FIXME: this pseudo-parsing seems wrong, but just getting it working for me first
+fn build_repo_url() -> Result<String> {
     let remote = env::repo()
         .find_remote(env::remote())
         .with_context(|| format!("remote not found: {}", env::remote()))?;
     let url = remote
         .url()
         .with_context(|| format!("remote has no url: {}", env::remote()))?;
-    // FIXME: Making some assumptions here, just getting it working for me first.
-    let repo = if url.starts_with("https://") {
-        url
+    Ok(if url.starts_with("https://") {
+        url.into()
     } else if let Some(git_path) = url.strip_prefix("git@github.com:") {
-        git_path.strip_suffix(".git").unwrap_or(git_path)
+        format!(
+            "https://github.com/{}",
+            git_path.strip_suffix(".git").unwrap_or(git_path)
+        )
     } else {
         bail!("unhandled git remote url: {url:?}");
-    };
-    Ok(format!("--repo={repo}"))
+    })
 }
 
 impl Pr {
@@ -213,6 +216,10 @@ impl Pr {
             }
         }
         bail!("gh pr create did not produce a URL")
+    }
+
+    pub fn get_url(&self) -> String {
+        format!("{}/pull/{}", REPO_URL.as_str(), self.number)
     }
 }
 

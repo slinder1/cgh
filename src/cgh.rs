@@ -26,6 +26,7 @@ pub fn cgh() -> Result<()> {
     env::validate().context("invalid configuration")?;
     match cli.command {
         cli::Command::Push(ref cfg) => push(cfg),
+        cli::Command::Url(ref cfg) => url(cfg),
         cli::Command::InstallHook(ref cfg) => install_hook(cfg),
     }
 }
@@ -186,6 +187,20 @@ fn detect_cycles(any_changes: &[AnyChange]) -> bool {
         }
     }
     false
+}
+
+fn url(_cfg: &cli::Url) -> Result<()> {
+    let local_changes =
+        change::get_local_changes().context("could not enumerate current local branch")?;
+    let mut prs_by_change_id = gh::prs_by_change_id(|pr| !pr.in_state(PrState::Closed))
+        .context("could not enumerate remote prs")?;
+    for local_change in local_changes {
+        if let Some(pr) = prs_by_change_id.remove(&local_change.id) {
+            println!("{}", pr.get_url());
+            return Ok(());
+        }
+    }
+    bail!("no change has an existing PR");
 }
 
 static COMMIT_MSG_HOOK_SRC: &str = include_str!("commit-msg");
