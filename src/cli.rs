@@ -25,7 +25,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 ///   stale with no relation to the latest patch contents. This seems to happen frequently anyway,
 ///   and avoiding it in the general case requires never rebasing which is not viable for anything
 ///   but an extremely short-lived review process. Ideas about how to potentially resolve this is
-///   documented at https://github.com/slinder1/gd/blob/main/DESIGN.md and contributions are
+///   documented at https://github.com/slinder1/cgh/blob/main/IDEAS.md and contributions are
 ///   welcome!
 /// * Can lose track of merged/closed PR if the user is not careful during rebases. This may be
 ///   mildly confusing, but is more-or-less by design: the change commit which corresponds to a
@@ -36,10 +36,10 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 ///
 /// It reads configuration from the first of the following:
 ///
-/// * The file identified by the environment variable `CM_CONFIG_PATH`, if that variable is set.
-/// * The file `.gd.toml` in the git repo's workdir, if it exists.
-/// * The file `gd.toml` in the git repo's workdir, if it exists.
-/// * The file `gd.toml` in platform-dependant user config dir, otherwise.
+/// * The file identified by the environment variable `CGH_CONFIG_PATH`, if that variable is set.
+/// * The file `.cgh.toml` in the git repo's workdir, if it exists.
+/// * The file `cgh.toml` in the git repo's workdir, if it exists.
+/// * The file `cgh.toml` in platform-dependant user config dir, otherwise.
 ///
 /// An example config file is:
 ///
@@ -74,7 +74,7 @@ pub struct Globals {
     /// The prefix for all remote branches created by the tool. Can be empty.
     #[arg(long, global = true)]
     pub user_branch_prefix: Option<String>,
-    /// Limit the global thread pool used by `gd` to have only one thread.
+    /// Limit the global thread pool used by `cgh` to have only one thread.
     #[arg(long, global = true)]
     pub serial: bool,
     /// Give a verbose summary of what would happen if executed.

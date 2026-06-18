@@ -37,11 +37,11 @@ fn user_config_path(filename: &str) -> Option<PathBuf> {
 }
 
 fn read_config() -> Result<Config> {
-    let path = std::env::var_os("GD_CONFIG_PATH")
+    let path = std::env::var_os("CGH_CONFIG_PATH")
         .map(PathBuf::from)
-        .or_else(|| repo_config_path(".gd.toml"))
-        .or_else(|| repo_config_path("gd.toml"))
-        .or_else(|| user_config_path("gd.toml"));
+        .or_else(|| repo_config_path(".cgh.toml"))
+        .or_else(|| repo_config_path("cgh.toml"))
+        .or_else(|| user_config_path("cgh.toml"));
     let path = match path {
         Some(p) => p,
         None => {

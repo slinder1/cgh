@@ -10,7 +10,7 @@ fn main() -> std::io::Result<()> {
     let mut cmd = Cli::command();
 
     for &shell in clap_complete::Shell::value_variants() {
-        clap_complete::generate_to(shell, &mut cmd, "gd", &outdir)?;
+        clap_complete::generate_to(shell, &mut cmd, "cgh", &outdir)?;
     }
 
     let mut buffer: Vec<u8> = Vec::default();

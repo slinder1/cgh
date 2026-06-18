@@ -1,5 +1,5 @@
 [package]
-name = "gd"
+name = "cgh"
 version = "0.6.0"
 license = "MIT"
 edition = "2024"
@@ -10,11 +10,11 @@ build = "build.rs"
 maintainer = "Scott Linder"
 copyright = "AMD"
 assets = [
-    ["target/release/gd", "usr/bin/gd", "755"],
+    ["target/release/cgh", "usr/bin/cgh", "755"],
     ["gen/*.1", "usr/share/man/man1/", "644"],
-    ["gen/gd.bash", "usr/share/bash-completion/completions/gd", "644"],
-    ["gen/gd.fish", "usr/share/fish/vendor_completions.d/gd", "644"],
-    ["gen/_gd", "usr/share/zsh/vendor-completions/_gd", "644"],
+    ["gen/cgh.bash", "usr/share/bash-completion/completions/cgh", "644"],
+    ["gen/cgh.fish", "usr/share/fish/vendor_completions.d/cgh", "644"],
+    ["gen/_cgh", "usr/share/zsh/vendor-completions/_cgh", "644"],
 ]
 
 [build-dependencies]
