@@ -20,7 +20,7 @@
         in
         {
           packages = rec {
-            gd = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
+            cgh = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
               pname = toml.name;
               inherit (toml) version;
               cargoLock = {
@@ -36,14 +36,14 @@
                 pkgs.openssl
               ];
               postInstall = ''
-                installShellCompletion --cmd gd \
-                  --bash gen/gd.bash \
-                  --fish gen/gd.fish \
-                  --zsh gen/_gd
+                installShellCompletion --cmd cgh \
+                  --bash gen/cgh.bash \
+                  --fish gen/cgh.fish \
+                  --zsh gen/_cgh
                 installManPage gen/*.1
               '';
             });
-            default = gd;
+            default = cgh;
           };
           formatter = pkgs.nixfmt-tree;
         };

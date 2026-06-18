@@ -89,6 +89,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "cgh"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "atomic-counter",
+ "clap",
+ "clap_complete",
+ "clap_mangen",
+ "dirs",
+ "git2",
+ "lazy_static",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tlrepo",
+ "toml",
+]
+
+[[package]]
 name = "clap"
 version = "4.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -251,26 +271,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "gd"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "atomic-counter",
- "clap",
- "clap_complete",
- "clap_mangen",
- "dirs",
- "git2",
- "lazy_static",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "tlrepo",
- "toml",
 ]
 
 [[package]]

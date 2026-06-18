@@ -14,7 +14,7 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-pub fn gd() -> Result<()> {
+pub fn cgh() -> Result<()> {
     let cli = env::cli();
     if cli.globals.serial {
         rayon::ThreadPoolBuilder::new()
