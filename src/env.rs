@@ -12,7 +12,24 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, read_to_string};
 use std::path::PathBuf;
-use tlrepo::ThreadLocalRepo;
+use thread_local::ThreadLocal;
+
+pub struct ThreadLocalRepo {
+    path: PathBuf,
+    repo: ThreadLocal<Repository>,
+}
+
+impl ThreadLocalRepo {
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            repo: ThreadLocal::new(),
+        }
+    }
+    pub fn get(&self) -> Result<&Repository, git2::Error> {
+        self.repo.get_or_try(|| Repository::open(&self.path))
+    }
+}
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Config {

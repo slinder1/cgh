@@ -154,8 +154,18 @@ impl Change {
     pub fn render_pr_ui(&self, changes: &[Self], branch_desc: Option<&str>) -> Result<()> {
         let commit = env::repo().find_commit(self.local_change.oid)?;
         let mut index = None;
-        let title = String::from(commit.summary().context("commit has no summary")?);
-        let mut body = String::from(commit.body().context("commit has no body")?);
+        let title = String::from(
+            commit
+                .summary()
+                .context("failed to get commit summary")?
+                .context("commit has no summary")?,
+        );
+        let mut body = String::from(
+            commit
+                .body()
+                .context("failed to get commit body")?
+                .context("commit has no body")?,
+        );
         body.push_str("\n\n---\n\n");
         body.push_str("**Stack**:\n");
         for (i, c) in changes.iter().enumerate() {
