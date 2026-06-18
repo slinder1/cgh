@@ -41,7 +41,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 /// * The file `gd.toml` in the git repo's workdir, if it exists.
 /// * The file `gd.toml` in platform-dependant user config dir, otherwise.
 ///
-/// An example config file is:
+/// An example config file (which you can generate with the `config` subcommand):
 ///
 ///     remote = "origin"
 ///     base_branch = "main"
@@ -105,6 +105,8 @@ pub enum Command {
     Push(Push),
     /// Install a commit-msg hook in the current git repo to create `Change-Id:` trailers.
     InstallHook(InstallHook),
+    /// Create a config file for the current repo if it doesn't exist, and then open it in VISUAL/EDITOR.
+    Config(Config),
 }
 
 #[derive(Args)]
@@ -129,3 +131,6 @@ pub struct InstallHook {
     #[arg(short, long)]
     pub force: bool,
 }
+
+#[derive(Args)]
+pub struct Config {}

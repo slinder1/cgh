@@ -9,10 +9,12 @@ use crate::util::{Extract, RepoExt};
 use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use std::collections::HashSet;
+use std::ffi::{OsString, OsStr};
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::process;
 
 pub fn gd() -> Result<()> {
     let cli = env::cli();
@@ -23,10 +25,15 @@ pub fn gd() -> Result<()> {
             .context("could not install serial thread pool")
             .extract();
     }
-    env::validate().context("invalid configuration")?;
-    match cli.command {
-        cli::Command::Push(ref cfg) => push(cfg),
-        cli::Command::InstallHook(ref cfg) => install_hook(cfg),
+    if let cli::Command::Config(ref cfg) = cli.command {
+        config(cfg)
+    } else {
+        env::validate().context("invalid configuration (Hint: try the `config` subcommand)")?;
+        match cli.command {
+            cli::Command::Push(ref cfg) => push(cfg),
+            cli::Command::InstallHook(ref cfg) => install_hook(cfg),
+            cli::Command::Config(_) => unreachable!("config should have already been handled"),
+        }
     }
 }
 
@@ -220,5 +227,67 @@ fn install_hook(cfg: &cli::InstallHook) -> Result<()> {
     hook_file
         .set_permissions(perms)
         .with_context(|| format!("could not set permissions for hook file: {hook_path:?}"))?;
+    Ok(())
+}
+
+fn config(_cfg: &cli::Config) -> Result<()> {
+    let repo = env::repo();
+    let workdir = repo.workdir().context("git repo has no workdir")?;
+    let path = workdir.join("gd.toml");
+    let exists = std::fs::exists(&path)
+        .with_context(|| format!("could not determine if config exists: {path:?}"))?;
+    if env::dry_run() {
+        let verb = if exists { "edit" } else { "create and edit" };
+        eprintln!("would {verb} {path:?}");
+        return Ok(());
+    }
+    if !exists {
+        let mut file = File::create_new(&path)
+            .with_context(|| format!("could not create config file: {path:?}"))?;
+        let mut config_text = vec![];
+        config_text.extend_from_slice(
+            b"remote = \"origin\"\nbase_branch = \"main\"\nuser_branch_prefix = \"users/",
+        );
+        config_text.extend(
+            std::env::var_os("USER")
+                .unwrap_or(OsString::from("USER"))
+                .into_encoded_bytes(),
+        );
+        config_text.extend_from_slice(b"/\"\n");
+        file.write_all(&config_text)
+            .with_context(|| format!("could not write to config file: {path:?}. Warning: partial template may have been written"))?;
+    }
+    let edit_result = open_editor(&path);
+    if !exists
+        && let Err(e) =
+            edit_result.with_context(|| format!("config template was still saved to {path:?}"))
+    {
+        eprint!("Warning: {e:?}");
+    }
+    Ok(())
+}
+
+fn open_editor<S>(path: S) -> Result<()>
+where
+    S: AsRef<OsStr>,
+{
+    let editor = std::env::var_os("VISUAL")
+        .or(std::env::var_os("EDITOR"))
+        .context("neither VISUAL nor EDITOR set")?;
+    let editor = match editor.into_string() {
+        Ok(e) => e,
+        Err(_) => bail!("VISUAL/EDITOR is not valid utf-8"),
+    };
+    let mut cmd_and_args = editor.split_whitespace();
+    let cmd = cmd_and_args.next().context("VISUAL/EDITOR is blank")?;
+    let args: Vec<&str> = cmd_and_args.collect();
+    let status = process::Command::new(cmd)
+        .args(args)
+        .arg(&path)
+        .status()
+        .context("VISUAL/EDITOR failed to exec")?;
+    if !status.success() {
+        bail!("VISUAL/EDITOR exited with non-zero status: {status:?}");
+    }
     Ok(())
 }
