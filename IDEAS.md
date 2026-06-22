@@ -107,3 +107,7 @@ This all seems a bit convoluted, and requires the community to host a bot which
 it trusts to approve reviews, but it would have the nice side-effect of leaving
 the original stacked PRs alone, so all discussions on them are correctly
 maintained against the code as it was when they were made in perpetuity.
+
+## had a new idea
+
+computers were a mistake
