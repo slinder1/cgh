@@ -183,8 +183,14 @@ impl Pr {
             .find_commit(local_change.oid)
             .context("cannot find commit")?;
         let remote_branch_ref = local_change.remote_branch_ref();
-        let title = commit.summary().context("commit has no summary")?;
-        let body = commit.body().context("commit has no body")?;
+        let title = commit
+            .summary()
+            .context("failed to get commit summary")?
+            .context("commit has no summary")?;
+        let body = commit
+            .body()
+            .context("failed to get commit body")?
+            .context("commit has no body")?;
         let base = env::base_branch();
         let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
