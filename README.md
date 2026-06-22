@@ -2,6 +2,8 @@ GitHub stacked-PR builder for those who miss Gerrit
 
 See `--help` for more.
 
+Hello cgh!
+
 # Etymology
 
 <sub>(*Note:* Early versions of this project were named `gd`)</sub>
