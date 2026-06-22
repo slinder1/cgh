@@ -22,6 +22,7 @@ pub struct Config {
     reviewer_groups: Option<HashMap<String, Vec<String>>>,
 }
 
+// foo
 fn repo_config_path(filename: &str) -> Option<PathBuf> {
     REPO.get()
         .ok()
