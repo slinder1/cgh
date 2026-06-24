@@ -152,6 +152,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
     changes
         .par_iter()
         .zip(diffs)
+        .filter(|(c, _)| c.is_nonempty())
         .map(|(c, diff)| c.pr.add_details_comment(&diff))
         .collect::<Result<Vec<_>>>()
         .context("could not add interdiff comments")?;
