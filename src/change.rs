@@ -115,9 +115,7 @@ impl LocalChange {
     pub fn diff(&self) -> Result<String> {
         let change = self.id.as_str();
         let repo = env::repo();
-        let commit = repo
-            .find_commit(self.oid)
-            .expect("a local change's commit Oid is not found in the repo now?");
+        let commit = self.commit()?;
         let parent = commit
             .parent(0)
             .with_context(|| format!("change {change} has no parent commit",))?;
@@ -133,6 +131,9 @@ impl LocalChange {
             .with_context(|| format!("failed to generate interdiff for change {change}"))?;
         Ok(out)
     }
+    pub fn commit<'repo>(&self) -> Result<Commit<'repo>> {
+        Ok(env::repo().find_commit(self.oid)?)
+    }
 }
 
 #[derive(Debug)]
@@ -143,7 +144,7 @@ pub struct Change {
 
 impl Change {
     pub fn render_pr_ui(&self, changes: &[Self], branch_desc: Option<&str>) -> Result<()> {
-        let commit = env::repo().find_commit(self.local_change.oid)?;
+        let commit = self.local_change.commit()?;
         let mut index = None;
         let title = String::from(
             commit
@@ -191,9 +192,7 @@ impl Change {
             .with_context(|| format!("could not parse revspec for remote branch: {remote_branch}"))?
             .peel_to_commit()
             .context("revspec for remote branch did not resolve to a commit")?;
-        let new_commit = repo
-            .find_commit(self.local_change.oid)
-            .expect("a local change's commit Oid is not found in the repo now?");
+        let new_commit = self.local_change.commit()?;
         let old_merge_base = old_commit
             .parent(0)
             .with_context(|| format!("old version of change {change} has no parent commit"))?;
