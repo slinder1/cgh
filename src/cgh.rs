@@ -5,7 +5,8 @@ use crate::change::{self, AnyChange, Change, LocalChange};
 use crate::cli;
 use crate::env;
 use crate::gh::{self, Pr, PrState};
-use crate::util::{Extract, RepoExt};
+use crate::metadata::StackMetadata;
+use crate::util::Extract;
 use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -26,15 +27,16 @@ pub fn cgh() -> Result<()> {
     env::validate().context("invalid configuration")?;
     match cli.command {
         cli::Command::Push(ref cfg) => push(cfg),
+        cli::Command::Name(ref cfg) => name(cfg),
+        cli::Command::Merge(ref cfg) => merge(cfg),
         cli::Command::Url(ref cfg) => url(cfg),
         cli::Command::InstallHook(ref cfg) => install_hook(cfg),
     }
 }
 
 fn push(cfg: &cli::Push) -> Result<()> {
-    let repo = env::repo();
-    let branch = repo.head_branch().context("HEAD must be a branch")?;
-    let branch_desc = repo.branch_desc(branch).ok();
+    let stack_meta =
+        StackMetadata::from_repo().context("could not parse branch description metadata")?;
     let mut reviewers = vec![];
     for group_key in cfg.reviewer_groups.iter() {
         let group = env::reviewer_groups()
@@ -47,6 +49,20 @@ fn push(cfg: &cli::Push) -> Result<()> {
         change::get_local_changes().context("could not enumerate current local branch")?;
     let mut prs_by_change_id = gh::prs_by_change_id(|pr| !pr.in_state(PrState::Closed))
         .context("could not enumerate remote prs")?;
+    let mut merged_prs = vec![];
+    for merged_change_id in stack_meta.merged_change_ids {
+        let pr = prs_by_change_id
+            .remove(&merged_change_id)
+            .with_context(|| format!("merged change {} has no pr", merged_change_id))?;
+        if pr.in_state(PrState::Open) {
+            bail!(
+                "pr {} for merged change {} is still open",
+                pr.number,
+                merged_change_id,
+            );
+        }
+        merged_prs.push(pr);
+    }
     let mut any_changes = vec![];
     for local_change in local_changes {
         any_changes.push(match prs_by_change_id.remove(&local_change.id) {
@@ -54,7 +70,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
             Some(pr) => {
                 if pr.in_state(PrState::Merged) {
                     bail!(
-                        "pr {} with Change-Id {} already merged",
+                        "pr {} for unmerged change {} is already merged",
                         pr.number,
                         local_change.id
                     );
@@ -137,7 +153,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
                     c.pr.number, base,
                 )
             })?;
-            c.render_pr_ui(&changes, branch_desc.as_deref())
+            c.render_pr_ui(&changes, &stack_meta.short_name, &merged_prs)
                 .context("could not render pseudo-ui in pr title/body")
         })
         .collect::<Result<Vec<_>>>()
@@ -176,6 +192,42 @@ fn detect_cycles(any_changes: &[AnyChange]) -> bool {
         }
     }
     false
+}
+
+fn name(cfg: &cli::Name) -> Result<()> {
+    let mut stack_meta = StackMetadata::from_repo()?;
+    match cfg.new_name {
+        None => println!("{}", stack_meta.short_name),
+        Some(ref new_name) => {
+            stack_meta.short_name = new_name.to_string();
+            stack_meta.to_repo()?;
+        }
+    }
+    Ok(())
+}
+
+fn merge(_cfg: &cli::Merge) -> Result<()> {
+    let mut stack_meta =
+        StackMetadata::from_repo().context("could not parse branch description metadata")?;
+    let local_change = change::get_local_changes()
+        .context("could not enumerate current local branch")?
+        .pop()
+        .context("no local changes")?;
+    if stack_meta.merged_change_ids.contains(&local_change.id) {
+        bail!("change {} was already merged", local_change.id);
+    }
+    let mut prs_by_change_id = gh::prs_by_change_id(|pr| !pr.in_state(PrState::Closed))
+        .context("could not enumerate remote prs")?;
+    let pr = prs_by_change_id
+        .remove(&local_change.id)
+        .with_context(|| format!("change {} has no pr", local_change.id))?;
+    let change = Change { local_change, pr };
+    change.merge()?;
+    stack_meta
+        .merged_change_ids
+        .push(change.local_change.id.clone());
+    stack_meta.to_repo()?;
+    Ok(())
 }
 
 fn url(_cfg: &cli::Url) -> Result<()> {

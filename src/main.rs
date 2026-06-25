@@ -6,6 +6,7 @@ mod change;
 mod cli;
 mod env;
 mod gh;
+mod metadata;
 mod util;
 
 fn main() -> anyhow::Result<()> {

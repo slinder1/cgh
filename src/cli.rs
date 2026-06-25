@@ -99,11 +99,31 @@ pub enum Command {
     /// sequence, with additional trailers in the PR message body to help reviewers navigate the
     /// stack.
     ///
-    /// Note: This command will never modify the local repo. No local branches are created or
-    /// destroyed, and no commits are touched. All mutation occurs exclusively on the `$remote`.
+    /// Note: This command will never modify your commits or refs, even their messages. No local
+    /// branches are created or destroyed. All mutation occurs exclusively on the `$remote`.
     #[command(visible_alias = "p")]
     Push(Push),
-    /// Print the PR URL of the top-most change which already has one.
+    /// With no arguments, print the current stack's short-name. With an argument, set it.
+    ///
+    /// The short-name is tracked in the `branch.<name>.cgh-shortName` git config entry,
+    /// and is used to prefix the PR title, e.g. `[${short-name} 3/5] ...`
+    Name(Name),
+    /// Merge the next change.
+    ///
+    /// If successful, this will modify the local `branch.<name>.cgh-mergedChangeIds` git config
+    /// entry to record that the change was merged. This allows future `cgh push`es to include
+    /// merged changes in the reviewer stack "UI", keeping the relative numbering of changes stable.
+    ///
+    /// If a change's PR is merged in any other way, it will "disappear" from the stack, affecting
+    /// all downstream numbering and the total number of changes in the stack. If you want to
+    /// manually correct this, edit `branch.<name>.cgh-mergedChangeIds` (a ':' separated list) using
+    /// e.g. `git config --edit` and append the merged change's ID to the list (or create it, if it
+    /// does not already exist).
+    ///
+    /// If you don't care about the renumbering behavior, you can safely ignore this subcommand (it
+    /// is purely aesthetic).
+    Merge(Merge),
+    /// Print the PR URL of the top-most (i.e. last) change which already has one.
     Url(Url),
     /// Install a commit-msg hook in the current git repo to create `Change-Id:` trailers.
     InstallHook(InstallHook),
@@ -124,6 +144,14 @@ pub struct Push {
     /// Leave all the PRs as drafts
     pub draft: bool,
 }
+
+#[derive(Args)]
+pub struct Name {
+    pub new_name: Option<String>,
+}
+
+#[derive(Args)]
+pub struct Merge;
 
 #[derive(Args)]
 pub struct Url;

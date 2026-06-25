@@ -143,7 +143,12 @@ pub struct Change {
 }
 
 impl Change {
-    pub fn render_pr_ui(&self, changes: &[Self], branch_desc: Option<&str>) -> Result<()> {
+    pub fn render_pr_ui(
+        &self,
+        changes: &[Self],
+        short_name: &str,
+        merged_prs: &[Pr],
+    ) -> Result<()> {
         let commit = self.local_change.commit()?;
         let mut index = None;
         let title = String::from(
@@ -168,17 +173,20 @@ impl Change {
             }
             body.push('\n');
         }
+        let index = index.expect(
+            "render_pr_ui asked to render into a stack of changes which does not contain self?",
+        );
+        for pr in merged_prs.iter().rev() {
+            body.push_str(&format!("- #{}\n", pr.number));
+        }
         body.push_str(&format!("- `{}`\n\n<sub>(Note: Closed and merged PRs may not be reflected here and PR numbering is not stable.)</sub>\n", env::base_branch()));
-        let count = changes.len();
-        let position = count
-            - index.expect(
-                "render_pr_ui asked to render into a stack of changes which does not contain self?",
-            );
-        let prefix = branch_desc
-            .map(|d| d.trim())
-            .filter(|d| !d.is_empty())
-            .map(|d| format!("{d}: "))
-            .unwrap_or_else(|| "".into());
+        let count = changes.len() + merged_prs.len();
+        let position = count - index;
+        let prefix = if short_name.is_empty() {
+            "".into()
+        } else {
+            format!("{}: ", short_name)
+        };
         self.pr
             .set_title_and_body(&format!("[{prefix}{position}/{count}]: {title}"), &body)
     }
@@ -223,6 +231,15 @@ impl Change {
         diff.print(DiffFormat::Patch, diff_printer(&mut out))
             .with_context(|| format!("failed to generate interdiff for change {change}"))?;
         Ok(out)
+    }
+    pub fn merge(&self) -> Result<()> {
+        let commit = self.local_change.commit()?;
+        let subject_raw = commit.summary()?.context("couldn't get summary")?;
+        let subject = format!("{} (#{})", subject_raw, self.pr.number);
+        let body = commit.body()?.context("couldn't get summary")?;
+        let sha = format!("{}", self.local_change.oid);
+        self.pr.merge(&subject, body, &sha)?;
+        Ok(())
     }
 }
 
