@@ -6,7 +6,9 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 ///
 /// * Never touches your local branches. The tool only reads from your local branch and attempts to
 ///   mirror it to GitHub by: fetching remote tracking branches, force-pushing namespaced refs,
-///   creating PRs, and maintaining PR bodies and comments to present a pseudo-UI for the stack.
+///   creating PRs, and maintaining PR bodies and comments to present a pseudo-UI for the stack. If
+///   you use the `merge` subcommand, it also touches namespaced git-config entries under
+///   `branch.<name>.cgh-*`, but this is only for optional features.
 /// * Treats one branch as one patch-stack, where each commit maps 1:1 to a PR.
 /// * Uses the same "Change-Id" trailer used by Gerrit. You can install the commit-msg hook from
 ///   a Gerrit instance or use the install-hook subcommand to install an embedded copy.
@@ -16,8 +18,13 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 /// * Quiet by default. No news is good news, but you can also get verbose output or a dry-run.
 /// * Uses the official `gh` tool to interface with the GitHub API, so you don't have
 ///   to go through authenticating another app.
+/// * Uses the actual `git` command for network operations, so however you authenticate
+///   works fine. (If you have to answer a prompt for each operation, you may have a
+///   less than stellar experience, but it should work. Use the `--serial` option if you
+///   want to do this).
 /// * Painfully slow, but at least tries to claw back performance where possible, primarily by
-///   parallelizing steps across all patches in the branch.
+///   parallelizing steps across all patches in the branch. There is a lot of room to
+///   optimize still, it does the least clever thing imaginable in a lot of cases.
 ///
 /// And currently its greatest shortcomings are:
 ///
@@ -27,11 +34,11 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 ///   but an extremely short-lived review process. Ideas about how to potentially resolve this is
 ///   documented at https://github.com/slinder1/cgh/blob/main/IDEAS.md and contributions are
 ///   welcome!
-/// * Can lose track of merged/closed PR if the user is not careful during rebases. This may be
-///   mildly confusing, but is more-or-less by design: the change commit which corresponds to a
-///   merged PR will naturally disappear from the branch on rebase. To avoid this, you can rebase
-///   using e.g. `--reapply-cherry-picks --empty=keep` which will maintain the stack at the expense
-///   of having empty commits in your local stack.
+/// * Can lose track of merged/closed PR if the user is not careful to use the `merge` subcommand.
+///   This may be mildly confusing, but is more-or-less by design: the change commit which corresponds
+///   to a merged PR will naturally disappear from the branch on rebase. The `merge` subcommand
+///   notes the Change-Id of successful merges in a git-config entry tied to the branch, so
+///   it doesn't forget to count them and link to them, but it is purely aesthetics.
 /// * Currently lacks a lot of polish and documentation.
 ///
 /// It reads configuration from the first of the following:
