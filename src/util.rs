@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::{Context, Result, bail};
-use git2::{Branch, Repository};
+use git2::{Branch, Config, Repository};
 use std::fmt::Debug;
 use std::process::{Command, Output};
 
@@ -63,8 +63,8 @@ impl<T, E: Debug> Extract for std::result::Result<T, E> {
 }
 
 pub trait RepoExt {
-    fn head_branch<'repo>(&'repo self) -> Result<Branch<'repo>>;
-    fn branch_desc(&self, str: Branch) -> Result<String>;
+    fn head_branch(&self) -> Result<Branch<'_>>;
+    fn branch_config<'repo>(&self, branch: &'repo Branch) -> Result<BranchConfig<'repo>>;
 }
 
 impl RepoExt for Repository {
@@ -75,23 +75,58 @@ impl RepoExt for Repository {
         }
         Ok(Branch::wrap(branch))
     }
-    fn branch_desc(&self, branch: Branch) -> Result<String> {
-        let branch_name = branch
-            .name()
-            .context("HEAD branch has no name")?
-            .context("HEAD branch name is not valid utf-8")?;
-        let repo_config = self.config().context("repo has no config")?;
-        let config_key = format!("branch.{branch_name}.description");
-        let config_entry = repo_config
-            .get_entry(config_key.as_str())
-            .context("no branch description")?;
-        let full_desc = config_entry
-            .value()
-            .context("branch description is not valid utf8")?;
-        Ok(full_desc
-            .split('\n')
-            .next()
-            .unwrap_or(full_desc)
-            .to_string())
+    fn branch_config<'repo>(&self, branch: &'repo Branch) -> Result<BranchConfig<'repo>> {
+        BranchConfig::new(self, branch)
     }
+}
+
+pub struct BranchConfig<'repo> {
+    branch_name: &'repo str,
+    config: Config,
+}
+
+impl<'repo> BranchConfig<'repo> {
+    pub fn new(repo: &Repository, branch: &'repo Branch<'_>) -> Result<Self> {
+        let branch_name = branch_name(branch)?;
+        let config = config(repo)?;
+        Ok(Self {
+            branch_name,
+            config,
+        })
+    }
+    fn format_key(&self, key: &str) -> String {
+        format!("branch.{}.cgh-{key}", self.branch_name)
+    }
+    pub fn get(&self, key: &str) -> Result<String> {
+        let config_key = self.format_key(key);
+        let value_result = self.config.get_entry(config_key.as_str());
+        let value = match value_result {
+            Ok(ce) => ce
+                .value()
+                .context("error getting config entry value")?
+                .to_string(),
+            // all the config values can safely default to the empty string
+            Err(e) if e.code() == git2::ErrorCode::NotFound => "".to_string(),
+            Err(e) => return Err(anyhow::Error::new(e).context("error getting config entry")),
+        };
+        Ok(value)
+    }
+    pub fn set(&mut self, key: &str, val: &str) -> Result<()> {
+        let config_key = self.format_key(key);
+        self.config
+            .set_str(config_key.as_str(), val)
+            .with_context(|| format!("could not update config key {config_key}"))?;
+        Ok(())
+    }
+}
+
+fn branch_name<'repo>(branch: &'repo Branch) -> Result<&'repo str> {
+    branch
+        .name()
+        .context("HEAD branch has no name")?
+        .context("HEAD branch name is not valid utf-8")
+}
+
+fn config(repo: &Repository) -> Result<Config> {
+    repo.config().context("repo has no config")
 }
