@@ -112,15 +112,6 @@ impl LocalChange {
         exec!(dry_return = (), cmd);
         Ok(())
     }
-    pub fn is_empty(&self) -> Result<bool> {
-        let repo = env::repo();
-        let commit = repo.find_commit(self.oid)?;
-        let parent = commit.parent(0)?;
-        Ok(tree(&commit)?.id() == tree(&parent)?.id())
-    }
-    pub fn is_nonempty(&self) -> bool {
-        !self.is_empty().unwrap_or(false)
-    }
     pub fn diff(&self) -> Result<String> {
         let change = self.id.as_str();
         let repo = env::repo();
@@ -233,9 +224,6 @@ impl Change {
         diff.print(DiffFormat::Patch, diff_printer(&mut out))
             .with_context(|| format!("failed to generate interdiff for change {change}"))?;
         Ok(out)
-    }
-    pub fn is_nonempty(&self) -> bool {
-        self.local_change.is_nonempty()
     }
 }
 

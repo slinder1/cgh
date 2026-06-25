@@ -52,7 +52,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
         any_changes.push(match prs_by_change_id.remove(&local_change.id) {
             None => AnyChange::LocalChange(local_change),
             Some(pr) => {
-                if pr.in_state(PrState::Merged) && local_change.is_nonempty() {
+                if pr.in_state(PrState::Merged) {
                     bail!(
                         "pr {} with Change-Id {} already merged",
                         pr.number,
@@ -68,9 +68,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
         any_changes
             .par_iter()
             .filter_map(|ac| {
-                if let AnyChange::Change(c) = ac
-                    && c.is_nonempty()
-                {
+                if let AnyChange::Change(c) = ac {
                     Some(c)
                 } else {
                     None
@@ -94,7 +92,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
             .collect::<Result<Vec<_>>>()?;
     }
     LocalChange::fetch_all(any_changes.iter().filter_map(|ac| match ac {
-        AnyChange::Change(c) if c.is_nonempty() => Some(&c.local_change),
+        AnyChange::Change(c) => Some(&c.local_change),
         _ => None,
     }))
     .context("could not fetch base branches for all existing prs")?;
@@ -103,9 +101,6 @@ fn push(cfg: &cli::Push) -> Result<()> {
         .map(|ac| ac.diff())
         .collect::<Result<Vec<_>>>()
         .context("could not build diffs")?;
-    // FIXME: Should we push a slightly modified version of the branch with empty commits stripped
-    // out? It would clean up the "Commits" tab on the PRs, and make the final merge message
-    // correct without edits.
     LocalChange::push_all(any_changes.iter().map(|ac| ac.local_change()))
         .context("could not push all local changes")?;
     // FIXME: Should try to restore the original branch contents if we fail from this point on. It
@@ -133,17 +128,15 @@ fn push(cfg: &cli::Push) -> Result<()> {
             let parents = &changes[i + 1..];
             let base = parents
                 .iter()
-                .find(|c| c.is_nonempty())
+                .next()
                 .map(|p| p.local_change.remote_branch())
                 .unwrap_or_else(|| env::base_branch().to_owned());
-            if c.is_nonempty() {
-                c.pr.set_base(base.as_ref()).with_context(|| {
-                    format!(
-                        "could not retarget pr {} to branch: {:?}",
-                        c.pr.number, base,
-                    )
-                })?;
-            }
+            c.pr.set_base(base.as_ref()).with_context(|| {
+                format!(
+                    "could not retarget pr {} to branch: {:?}",
+                    c.pr.number, base,
+                )
+            })?;
             c.render_pr_ui(&changes, branch_desc.as_deref())
                 .context("could not render pseudo-ui in pr title/body")
         })
@@ -152,20 +145,17 @@ fn push(cfg: &cli::Push) -> Result<()> {
     changes
         .par_iter()
         .zip(diffs)
-        .filter(|(c, _)| c.is_nonempty())
         .map(|(c, diff)| c.pr.add_details_comment(&diff))
         .collect::<Result<Vec<_>>>()
         .context("could not add interdiff comments")?;
     changes
         .par_iter()
-        .filter(|c| c.is_nonempty())
         .map(|c| c.pr.add_reviewers(reviewers.as_ref()))
         .collect::<Result<Vec<_>>>()
         .context("could not add pr reviewers")?;
     if !cfg.draft {
         changes
             .par_iter()
-            .filter(|c| c.is_nonempty())
             .map(|c| c.pr.mark_ready(true))
             .collect::<Result<Vec<_>>>()
             .context("could not mark prs as ready")?;
@@ -176,9 +166,7 @@ fn push(cfg: &cli::Push) -> Result<()> {
 fn detect_cycles(any_changes: &[AnyChange]) -> bool {
     let mut parent_refs_seen: HashSet<String> = HashSet::new();
     for any_change in any_changes.iter() {
-        if let AnyChange::Change(change) = any_change
-            && change.local_change.is_nonempty()
-        {
+        if let AnyChange::Change(change) = any_change {
             if !parent_refs_seen.is_empty()
                 && !parent_refs_seen.contains(&change.local_change.remote_branch())
             {
